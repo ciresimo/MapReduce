@@ -9,4 +9,4 @@ set(CMAKE_CXX_STANDARD_REQUIRED True)
 add_executable(main main.cpp)
 
 # Include the directory where mr.h is located (assuming it's in the same directory)
-target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR})
+target_include_directories(main PRIVATE ${CMAKE_SOURCE_DIR}/CPTL)

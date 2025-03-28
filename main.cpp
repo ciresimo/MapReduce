@@ -1,5 +1,8 @@
 #include <unordered_map>
+#include <thread>
+#include <vector>
 #include "mr.h"
+#include <ctpl.h>
 
 using namespace std;
 
@@ -21,16 +24,14 @@ void readWordsFromFile(const std::string& filename)
         std::string cleanedWord;
         for (char ch : word)
         {
-            if (std::isalnum(ch))
+            if (std::isalnum(ch) && !std::isdigit(ch))
             {
-                cleanedWord += ch;
+                cleanedWord += std::tolower(ch);
             }
         }
         
         if (!cleanedWord.empty())
         {
-            // TODO: remove print
-            // std::cout << cleanedWord << std::endl;
             storeWordInFile(cleanedWord, 1);
         }
     }
@@ -56,16 +57,18 @@ void storeWordInFile(const std::string& word, const int thread_number)
     return;
 }
 
-void sumWordsCounts()
-{
-    // TODO change this to include all the files
-    for(int i = 49; i < 122 ; i++)
-    {
-        std::string fileName = outputDirectory + "mr-1-" + std::to_string(i) + ".txt"; // TODO: include parallel computations
-        createMapAndCount(fileName);
-    }
-    return;
-}
+
+// // TODO: remove when not used anymore
+// void sumWordsCounts()
+// {
+//     // TODO change this to include all the files
+//     for(int i = 49; i < 122 ; i++)
+//     {
+//         std::string fileName = outputDirectory + "mr-1-" + std::to_string(i) + ".txt"; // TODO: include parallel computations
+//         createMapAndCount(fileName);
+//     }
+//     return;
+// }
 
 void createMapAndCount(const std::string& filename)
 {
@@ -109,13 +112,31 @@ void createMapAndCount(const std::string& filename)
     return;
 }
 
-
-
-int main()
+void map(const std::string& filename)
 {
-    // Ensure the output folder exists and is empty
-    std::filesystem::path outputDir = std::filesystem::current_path() / "../output";
+    readWordsFromFile(filename);
+    createMapAndCount(filename);
+    return;
+}
+
+void processFile(int threadID, const std::string& filename) {
+    std::cout << "Thread " << threadID << " is processing file: " << filename << '\n';
+    map(filename);
+}
+
+
+
+int main(int argc, char* argv[])
+{
+    // TODO: for now I impose that the files are 8
+    if (argc < 9)
+    {
+        std::cerr << "Error: Please provide at least 8 input files." << std::endl;
+        return 1;
+    }
+
     
+    // Make sure that output folder exists and is empty
     if (!std::filesystem::exists(outputDir))
     {
         std::filesystem::create_directory(outputDir);  // Create output folder if it doesn't exist
@@ -128,8 +149,26 @@ int main()
             std::filesystem::remove(entry);  // Remove each file in the folder
         }
     }
-    std::string filename = "../pg-being_ernest.txt";
-    readWordsFromFile(filename);
-    sumWordsCounts();
+    // Ensure the output folder exists and is empty
+    std::filesystem::path outputDir = std::filesystem::current_path() / "../output";
+
+    // List of input files
+    std::vector<std::string> files;
+    for (int i = 1; i < argc; ++i)
+    {  
+        files.push_back(argv[i]);  
+    }
+
+   ctpl::thread_pool p(4 /* two threads in the pool */);
+
+   for(const auto& file: files)
+   {
+        p.push(processFile,file);
+   }
+
+
+    // std::string filename = "../pg-being_ernest.txt";
+
+    // sumWordsCounts();
     return 0;
 }
