@@ -4,11 +4,12 @@
 #include <cctype>
 #include <filesystem>
 
-void readWordsFromFile(const std::string& filename);
-void storeWordInFile(const std::string& word, const int thread_number);
+void readWordsFromFile(const std::string& fileName, const int threadNumber);
+void storeWordInFile(const std::string& word, const int threadNumber);
 void sumWordsCounts();
-void createMapAndCount(const std::string& filename);
-void map(const std::string& filename);
+void createMapAndCount(const std::string& fileName);
+void map(const std::string& fileName, const int threadNumber);
+void processFile(int threadNumber, const std::string& fileName);
 
 
 

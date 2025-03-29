@@ -1,19 +1,21 @@
 #include <unordered_map>
 #include <thread>
 #include <vector>
-#include "mr.h"
+#include <mutex>
+#include <mr.h>
 #include <ctpl.h>
 
 using namespace std;
 
 std::string outputDirectory = "../output/";
+std::mutex output_mutex;
 
-void readWordsFromFile(const std::string& filename)
+void readWordsFromFile(const std::string& fileName, const int threadNumber)
 {
-    std::ifstream file(filename);
+    std::ifstream file(fileName);
     if (!file)
     {
-        std::cerr << __func__ << " | Error: Unable to open file " << filename << std::endl;
+        std::cerr << __func__ << " | Error: Unable to open file " << fileName << std::endl;
         return;
     }
 
@@ -32,24 +34,25 @@ void readWordsFromFile(const std::string& filename)
         
         if (!cleanedWord.empty())
         {
-            storeWordInFile(cleanedWord, 1);
+            storeWordInFile(cleanedWord, threadNumber);
         }
     }
 
     file.close();
 }
 
-void storeWordInFile(const std::string& word, const int thread_number)
+void storeWordInFile(const std::string& word, const int threadNumber)
 {
-    const int M = 1; //TODO: get is an input when parallelizing stuff
     const char firstLetter = word[0];  // Get the first letter
+    // const int M = 1; //TODO: get is an input when parallelizing stuff
+    // int bucket = int(firstLetter) % M;    // Compute bucket index M
     int bucket = int(firstLetter);    // Compute bucket index M
 
-    std::string filename = outputDirectory + "mr-" + std::to_string(thread_number) + "-" + std::to_string(bucket) + ".txt";
-    std::ofstream file(filename, std::ios_base::app); // TODO: maybe I should check if already open 
+    std::string fileName = outputDirectory + "mr-" + std::to_string(threadNumber) + "-" + std::to_string(bucket) + ".txt";
+    std::ofstream file(fileName, std::ios_base::app); // TODO: maybe I should check if already open 
     if (!file)
     {
-        std::cerr  << __func__ << " | Error: Unable to open file " << filename << std::endl;
+        std::cerr  << __func__ << " | Error: Unable to open file " << fileName << std::endl;
         return;
     }
     file << word + "\n";
@@ -57,27 +60,16 @@ void storeWordInFile(const std::string& word, const int thread_number)
     return;
 }
 
-
-// // TODO: remove when not used anymore
-// void sumWordsCounts()
-// {
-//     // TODO change this to include all the files
-//     for(int i = 49; i < 122 ; i++)
-//     {
-//         std::string fileName = outputDirectory + "mr-1-" + std::to_string(i) + ".txt"; // TODO: include parallel computations
-//         createMapAndCount(fileName);
-//     }
-//     return;
-// }
-
-void createMapAndCount(const std::string& filename)
+void createMapAndCount(const std::string& fileName)
 {
-    std::ifstream inputFile(filename);
+    std::ifstream inputFile(fileName);
     if (!inputFile)
     {
-        std::cerr  << __func__ << " | Error: Unable to open inputFile " << filename << std::endl;
+        std::cerr  << __func__ << " | Error: Unable to open inputFile " << fileName << std::endl;
         return;
     }
+
+    std::cout << "Creating hash map for file:" << fileName << std::endl;
     std::unordered_map<string,int> wordMap;
     std::string word;
     while (inputFile >> word)
@@ -95,12 +87,13 @@ void createMapAndCount(const std::string& filename)
     inputFile.close(); 
 
     // Now, open the file in output mode to store the map
-    std::ofstream outFile(filename, std::ios::trunc);  // Open in truncate mode to clear the file
+    std::ofstream outFile(fileName, std::ios::trunc);  // Open in truncate mode to clear the file
     if (!outFile)
     {
-        std::cerr << __func__ << " | Error: Unable to open file " << filename << " for writing." << std::endl;
+        std::cerr << __func__ << " | Error: Unable to open file " << fileName << " for writing." << std::endl;
         return;
     }
+    std::cout << "Creating hash map for file:" << fileName << std::endl;
 
     // Write the map contents to the file (word and its count)
     for (const auto& entry : wordMap)
@@ -112,29 +105,32 @@ void createMapAndCount(const std::string& filename)
     return;
 }
 
-void map(const std::string& filename)
+void map(const std::string& fileName, const int threadNumber)
 {
-    readWordsFromFile(filename);
-    createMapAndCount(filename);
+    readWordsFromFile(fileName, threadNumber);
+    createMapAndCount(fileName);
     return;
 }
 
-void processFile(int threadID, const std::string& filename) {
-    std::cout << "Thread " << threadID << " is processing file: " << filename << '\n';
-    map(filename);
+void processFile(int threadNumber, const std::string& fileName)
+{
+    std::lock_guard<std::mutex> lock(output_mutex);
+    std::cout << "Thread " << threadNumber << " is processing file: " << fileName << std::endl;
+    map(fileName, threadNumber);
 }
 
 
 
 int main(int argc, char* argv[])
 {
-    // TODO: for now I impose that the files are 8
     if (argc < 9)
     {
-        std::cerr << "Error: Please provide at least 8 input files." << std::endl;
+        std::cerr << "Error: Please provide at least 8 input files. Only " << argc << " recieved" << std::endl;
         return 1;
     }
 
+    // Ensure the output folder exists and is empty
+    std::filesystem::path outputDir = std::filesystem::current_path() / "../output";
     
     // Make sure that output folder exists and is empty
     if (!std::filesystem::exists(outputDir))
@@ -149,26 +145,19 @@ int main(int argc, char* argv[])
             std::filesystem::remove(entry);  // Remove each file in the folder
         }
     }
-    // Ensure the output folder exists and is empty
-    std::filesystem::path outputDir = std::filesystem::current_path() / "../output";
 
     // List of input files
     std::vector<std::string> files;
-    for (int i = 1; i < argc; ++i)
+    for (int i = 1; i < argc; i++)
     {  
         files.push_back(argv[i]);  
     }
+    ctpl::thread_pool p(8);
 
-   ctpl::thread_pool p(4 /* two threads in the pool */);
-
-   for(const auto& file: files)
-   {
+    for(const auto& file: files)
+    {
         p.push(processFile,file);
-   }
+    }
 
-
-    // std::string filename = "../pg-being_ernest.txt";
-
-    // sumWordsCounts();
     return 0;
 }
