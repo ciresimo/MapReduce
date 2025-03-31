@@ -7,7 +7,7 @@
 
 using namespace std;
 
-std::string outputDirectory = "../output/";
+std::string outputDirectory = "../output/"; //TODO: change to something like outputPath.string()
 const std::filesystem::path outputPath{"../output/"};
 std::mutex output_mutex;
 const int threadsTotalNumber = 4;
@@ -31,6 +31,7 @@ void readWordsFromFile(const std::string& fileName, const int threadNumber)
         {
             if (std::isalnum(ch) && !std::isdigit(ch))
             {
+                // Make sure that all letters are low case
                 cleanedWord += std::tolower(ch);
             }
         }
@@ -64,6 +65,7 @@ void storeWordInFile(const std::string& word, const int threadNumber)
         std::cerr  << __func__ << " | Error: Unable to open file " << fileName << std::endl;
         return;
     }
+    // Add the word to the file as a new line
     file << word + "\n";
     file.close();
     return;
@@ -115,8 +117,8 @@ void createMap(const std::string& fileName, std::unordered_map<string,int>& word
 
 void writeMap(const std::string& fileName, std::unordered_map<string,int>& wordMap)
 {
-    // Now, open the file in output mode to store the map
-    std::ofstream outFile(fileName, std::ios::trunc);  // Open in truncate mode to clear the file
+    // Open the file in output mode to store the map. Make sure to clear the file before writing
+    std::ofstream outFile(fileName, std::ios::trunc);
     if (!outFile)
     {
         std::cerr << __func__ << " | Error: Unable to open file " << fileName << " for writing." << std::endl;
@@ -127,7 +129,7 @@ void writeMap(const std::string& fileName, std::unordered_map<string,int>& wordM
     // Write the map contents to the file (word and its count)
     for (const auto& entry : wordMap)
     {
-        outFile << entry.first << "," << entry.second << "\n";  // Write key and value
+        outFile << entry.first << "," << entry.second << "\n";
     }
 
     outFile.close();
@@ -188,36 +190,28 @@ int main(int argc, char* argv[])
         return 1;
     }
 
-    // Ensure the output folder exists and is empty
-    std::filesystem::path outputDir = std::filesystem::current_path() / "../output";
-    
     // Make sure that output folder exists and is empty
-    if (!std::filesystem::exists(outputDir))
+    if (!std::filesystem::exists(outputPath))
     {
-        std::filesystem::create_directory(outputDir);  // Create output folder if it doesn't exist
+        std::filesystem::create_directory(outputPath);
     }
     else
     {
         // Clear the folder if it exists
-        for (const auto& entry : std::filesystem::directory_iterator(outputDir))
+        for (const auto& entry : std::filesystem::directory_iterator(outputPath))
         {
-            std::filesystem::remove(entry);  // Remove each file in the folder
+            std::filesystem::remove(entry);
         }
     }
 
-    // List of input files TODO: I think I can merge the two in a single for cycle
-    std::vector<std::string> files;
+    
+    // Extract all words from input files
+    ctpl::thread_pool pool1(threadsTotalNumber);
     for (int i = 1; i < argc; i++)
     {  
-        files.push_back(argv[i]);  
+        pool1.push(processFile,argv[i]);
     }
-    ctpl::thread_pool pool1(threadsTotalNumber);
 
-    // Extract all words from input file
-    for(const auto& file: files)
-    {
-        pool1.push(processFile,file);
-    }
     // Wait for all threads to complete the work
     pool1.stop(true);
 
@@ -244,10 +238,9 @@ int main(int argc, char* argv[])
 
     for(int i = 0; i < bucketsTotalNumber; i++)
     {
-        pool3.push(reduce,i);
-        // std::cout << "Reducing (1 thread) bucket:" << i << std::endl;
-        // reduceBucketFiles(i);
+        pool3.push(reduce,i);        
     }
+    pool3.stop(true);
 
     return 0;
 }
