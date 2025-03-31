@@ -7,7 +7,6 @@
 
 using namespace std;
 
-std::string outputDirectory = "../output/"; //TODO: change to something like outputPath.string()
 const std::filesystem::path outputPath{"../output/"};
 std::mutex output_mutex;
 const int threadsTotalNumber = 4;
@@ -58,7 +57,7 @@ void storeWordInFile(const std::string& word, const int threadNumber)
     const char firstLetter = word[0];  // Get the first letter
     int bucket = int(firstLetter - 'a') % bucketsTotalNumber;    // Compute bucket index M normalized to range 0-25
 
-    std::string fileName = outputDirectory + "mr-" + std::to_string(threadNumber) + "-" + std::to_string(bucket) + ".txt";
+    std::string fileName = outputPath.string() + "mr-" + std::to_string(threadNumber) + "-" + std::to_string(bucket) + ".txt";
     std::ofstream file(fileName, std::ios_base::app);
     if (!file)
     {
@@ -164,13 +163,13 @@ void reduceBucketFiles(const int bucketNumber)
     // Create a unique map for all the mr-i-bucketNumber files
     for(int i = 0; i < threadsTotalNumber; i++)
     {
-        std::string fileName = outputDirectory + "mr-" + std::to_string(i) + "-" + std::to_string(bucketNumber) + ".txt";
+        std::string fileName = outputPath.string() + "mr-" + std::to_string(i) + "-" + std::to_string(bucketNumber) + ".txt";
         std::cout << "Adding to the map file: " << fileName << std::endl;
         createMap(fileName, wordMap);
     }
 
     // Write it down in a single file
-    std::string outputFileName = outputDirectory + "out-" + std::to_string(bucketNumber) + ".txt";
+    std::string outputFileName = outputPath.string() + "out-" + std::to_string(bucketNumber) + ".txt";
     writeMap(outputFileName, wordMap); 
     return;
 }
