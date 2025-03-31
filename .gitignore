@@ -1,3 +1,4 @@
 output/
 build/
 *.pdf
+.vscode/

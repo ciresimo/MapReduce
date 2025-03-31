@@ -8,7 +8,10 @@
 using namespace std;
 
 std::string outputDirectory = "../output/";
+const std::filesystem::path outputPath{"../output/"};
 std::mutex output_mutex;
+const int threadsTotalNumber = 4;
+const int bucketsTotalNumber = 4;
 
 void readWordsFromFile(const std::string& fileName, const int threadNumber)
 {
@@ -41,15 +44,21 @@ void readWordsFromFile(const std::string& fileName, const int threadNumber)
     file.close();
 }
 
+void processFile(const int threadNumber, const std::string& fileName)
+{
+    // std::lock_guard<std::mutex> lock(output_mutex);
+    std::cout << "Thread " << threadNumber << " is processing file: " << fileName << std::endl;
+    readWordsFromFile(fileName, threadNumber);
+    return;
+}
+
 void storeWordInFile(const std::string& word, const int threadNumber)
 {
     const char firstLetter = word[0];  // Get the first letter
-    // const int M = 1; //TODO: get is an input when parallelizing stuff
-    // int bucket = int(firstLetter) % M;    // Compute bucket index M
-    int bucket = int(firstLetter);    // Compute bucket index M
+    int bucket = int(firstLetter - 'a') % bucketsTotalNumber;    // Compute bucket index M normalized to range 0-25
 
     std::string fileName = outputDirectory + "mr-" + std::to_string(threadNumber) + "-" + std::to_string(bucket) + ".txt";
-    std::ofstream file(fileName, std::ios_base::app); // TODO: maybe I should check if already open 
+    std::ofstream file(fileName, std::ios_base::app);
     if (!file)
     {
         std::cerr  << __func__ << " | Error: Unable to open file " << fileName << std::endl;
@@ -60,7 +69,7 @@ void storeWordInFile(const std::string& word, const int threadNumber)
     return;
 }
 
-void createMapAndCount(const std::string& fileName)
+void createMap(const std::string& fileName, std::unordered_map<string,int>& wordMap)
 {
     std::ifstream inputFile(fileName);
     if (!inputFile)
@@ -69,12 +78,28 @@ void createMapAndCount(const std::string& fileName)
         return;
     }
 
-    std::cout << "Creating hash map for file:" << fileName << std::endl;
-    std::unordered_map<string,int> wordMap;
     std::string word;
     while (inputFile >> word)
     {
         int occurrence = 1;
+
+        // This first part is important only during the reduce phase. In this case the "word" is composed by both the actual word and the occurence
+        // Find the position of the first comma (in order to use the same function also during the reduce phase)
+        size_t commaPos = word.find(',');
+        if (commaPos != std::string::npos)
+        {
+            try 
+            {
+                occurrence = std::stoi(word.substr(commaPos + 1)); // Convert the part after the comma to an integer
+            } 
+            catch (const std::invalid_argument& e) 
+            {
+                std::cerr << "Warning: Invalid occurrence value in word: " << word << std::endl;
+                occurrence = 1; // Fallback to default occurrence
+            }
+            word = word.substr(0, commaPos); // Keep the portion before the comma (which is the actual word)
+        }
+
         // If the word is in the map (and so there are more occurency of it), add to the occurence the value already stored
         if(wordMap.find(word) != wordMap.end())
         {
@@ -84,8 +109,12 @@ void createMapAndCount(const std::string& fileName)
 
     }
     // Close the file after reading
-    inputFile.close(); 
+    inputFile.close();
+    return;
+}
 
+void writeMap(const std::string& fileName, std::unordered_map<string,int>& wordMap)
+{
     // Now, open the file in output mode to store the map
     std::ofstream outFile(fileName, std::ios::trunc);  // Open in truncate mode to clear the file
     if (!outFile)
@@ -105,21 +134,51 @@ void createMapAndCount(const std::string& fileName)
     return;
 }
 
-void map(const std::string& fileName, const int threadNumber)
+void createMapAndCount(const std::string& fileName)
 {
-    readWordsFromFile(fileName, threadNumber);
+    std::unordered_map<std::string,int> wordMap;
+
+    // Create a word map for the specified file
+    createMap(fileName, wordMap);
+
+    // Write out the word map in the same file
+    writeMap(fileName,wordMap);
+    
+    return;
+}
+
+void map(const int threadNumber, const std::string& fileName)
+{
+    // std::lock_guard<std::mutex> lock(output_mutex);
+    std::cout << "Thread " << threadNumber << " is mapping file: " << fileName << std::endl;
     createMapAndCount(fileName);
     return;
 }
 
-void processFile(int threadNumber, const std::string& fileName)
+void reduceBucketFiles(const int bucketNumber)
 {
-    std::lock_guard<std::mutex> lock(output_mutex);
-    std::cout << "Thread " << threadNumber << " is processing file: " << fileName << std::endl;
-    map(fileName, threadNumber);
+    std::unordered_map<std::string,int> wordMap;
+
+    // Create a unique map for all the mr-i-bucketNumber files
+    for(int i = 0; i < threadsTotalNumber; i++)
+    {
+        std::string fileName = outputDirectory + "mr-" + std::to_string(i) + "-" + std::to_string(bucketNumber) + ".txt";
+        std::cout << "Adding to the map file: " << fileName << std::endl;
+        createMap(fileName, wordMap);
+    }
+
+    // Write it down in a single file
+    std::string outputFileName = outputDirectory + "out-" + std::to_string(bucketNumber) + ".txt";
+    writeMap(outputFileName, wordMap); 
+    return;
 }
 
-
+void reduce(const int threadNumber, const int bucketNumber)
+{
+    std::cout << "Thread " << threadNumber << " is reducing files from bucket: " << bucketNumber << std::endl;
+    reduceBucketFiles(bucketNumber);
+    return;  
+}
 
 int main(int argc, char* argv[])
 {
@@ -146,17 +205,48 @@ int main(int argc, char* argv[])
         }
     }
 
-    // List of input files
+    // List of input files TODO: I think I can merge the two in a single for cycle
     std::vector<std::string> files;
     for (int i = 1; i < argc; i++)
     {  
         files.push_back(argv[i]);  
     }
-    ctpl::thread_pool p(8);
+    ctpl::thread_pool pool1(threadsTotalNumber);
 
+    // Extract all words from input file
     for(const auto& file: files)
     {
-        p.push(processFile,file);
+        pool1.push(processFile,file);
+    }
+    // Wait for all threads to complete the work
+    pool1.stop(true);
+
+    // MAP
+    ctpl::thread_pool pool2(threadsTotalNumber);
+
+    // Iterate through the files in the output directory
+    for(const auto& entry : std::filesystem::directory_iterator{outputPath})
+    {
+        // Only add files (not directories) to the list
+        if (entry.is_regular_file())
+        {
+            pool2.push(map,entry.path().string());
+        }
+        else
+        {
+            std::cout << "File not valid for mapping: " << entry.path().string() << std::endl;
+        }
+    }
+    pool2.stop(true);
+
+    // REDUCE
+    ctpl::thread_pool pool3(bucketsTotalNumber);
+
+    for(int i = 0; i < bucketsTotalNumber; i++)
+    {
+        pool3.push(reduce,i);
+        // std::cout << "Reducing (1 thread) bucket:" << i << std::endl;
+        // reduceBucketFiles(i);
     }
 
     return 0;
