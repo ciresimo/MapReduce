@@ -18,11 +18,16 @@ The program consists of the following major components:
  
 Parallel computing is enhanced through the use of the [CTPL library](https://github.com/vit-vit/CTPL). It allows setting up pools with a fixed amount of threads with automatic task assignment, handling all concurrency issues
 
-# Results and Performance
+## Building and running the code
+- `make build` installs the necessary cmake dependancies and builds the code (if not working straight away, try by manually removing the build directory)
+- `make run` runs the code, giving in input all the text files
+
+## Results and Performance
 The program successfully processes multiple input files in parallel, efficiently distributing work across available CPU cores.
 Performance improvements are evident compared to single-threaded implementations:
 - no threads: 2908 ms
 - threads + intermediate files: 1420 ms
 - threads without intermediate files: 452 ms
+
 Performance improvement aorund 85%
 
