@@ -16,9 +16,13 @@ The program consists of the following major components:
 
  -Performance Optimization: The use of std::unordered_map ensures fast lookups, insertions, and updates. By eliminating intermediate files, the program significantly reduces I/O overhead.
  
-Parallel computing is enhanced through the use of the [CTPL library](https://github.com/vit-vit/CTPL). It allows setting up pools witha fixed amount of threads with automatic task assignment, handling all concurrency issues
+Parallel computing is enhanced through the use of the [CTPL library](https://github.com/vit-vit/CTPL). It allows setting up pools with a fixed amount of threads with automatic task assignment, handling all concurrency issues
 
 # Results and Performance
 The program successfully processes multiple input files in parallel, efficiently distributing work across available CPU cores.
-Performance improvements are evident compared to single-threaded implementations, particularly for large text datasets.
+Performance improvements are evident compared to single-threaded implementations:
+- no threads: 2908 ms
+- threads + intermediate files: 1420 ms
+- threads without intermediate files: 452 ms
+Performance improvement aorund 85%
 
