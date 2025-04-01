@@ -173,6 +173,8 @@ int main(int argc, char* argv[])
     }
 
     // MAP
+    const auto start{std::chrono::high_resolution_clock::now()};
+    
 
     // Extract all words from input files and store them in the maps
     ctpl::thread_pool pool1(threadsTotalNumber);
@@ -192,6 +194,12 @@ int main(int argc, char* argv[])
         pool2.push(reduce,i);        
     }
     pool2.stop(true);
+
+    const auto finish{std::chrono::high_resolution_clock::now()};
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(finish - start);
+
+
+    std::cout << "Process duration: " << duration.count() << "ms" << std::endl;
 
     return 0;
 }
